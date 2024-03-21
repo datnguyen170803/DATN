@@ -1,10 +1,12 @@
 package com.example.controller.shop;
 
 import java.util.Collection;
+import java.util.concurrent.atomic.AtomicReference;
 
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -12,6 +14,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.example.dto.Item;
 import com.example.helper.CartStatusTypeEnum;
@@ -26,9 +29,13 @@ import com.example.model.User;
 import com.example.service.CartService;
 import com.example.service.OrderDetailService;
 import com.example.service.OrderService;
+import com.example.service.PayPalService;
 import com.example.service.ProductService;
 import com.example.service.SessionService;
 import com.example.service.UserService;
+import com.paypal.api.payments.Links;
+import com.paypal.api.payments.Payment;
+import com.paypal.base.rest.PayPalRESTException;
 
 @Controller
 @RequestMapping("shop/checkout")
@@ -42,15 +49,18 @@ public class CheckoutController {
 
 	@Autowired
 	UserService userService;
-	
+
 	@Autowired
 	OrderService orderService;
-	
+
 	@Autowired
 	OrderDetailService orderDetailService;
 
 	@Autowired
 	SessionService session;
+
+	@Autowired
+	PayPalService paypal;
 
 	@GetMapping(value = "")
 	public String checkoutPage(Model model, @ModelAttribute("order") Order order) {
@@ -79,8 +89,12 @@ public class CheckoutController {
 				model.addAttribute(StatusTypeEnum.ERROR.type, "Email already in use.");
 				return checkoutPage(model, order);
 			}
+
 		order.setStatus(CartStatusTypeEnum.WAITING.type);
 		Order orderOld = orderService.saveOrUpdate(order).get();
+
+		AtomicReference<Double> totalPriceRef = new AtomicReference<>(0.0);
+
 		Collection<Item> items = cartService.getItems();
 		items.forEach(item -> {
 			Product product = productService.findById(item.getProduct_id()).get();
@@ -93,8 +107,27 @@ public class CheckoutController {
 			orderDetailService.saveOrUpdate(orderDetail);
 			product.setQuantity(product.getQuantity() - item.getQuantity());
 			productService.saveOrUpdate(product);
+
+			double price = item.getPrice() * item.getQuantity();
+			totalPriceRef.updateAndGet(v -> v + price);
+
 		});
 		cartService.clear();
+		if (orderOld.getPay().equals("paypal")) {
+			try {
+				Payment payment = paypal.createPayment(totalPriceRef.get());
+				for (Links link : payment.getLinks()) {
+					if (link.getRel().equals("approval_url")) {
+						return TransferTypeEnum.REDIRECT.type + link.getHref();
+					}
+				}
+			} catch (PayPalRESTException e) {
+				e.printStackTrace();
+			}
+		}
+		
 		return TransferTypeEnum.REDIRECT.type + RequestTypeEnum.SHOP_CONFIRMATION.type + "?id_cart=" + orderOld.getId();
 	}
+	
+	
 }

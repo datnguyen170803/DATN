@@ -51,7 +51,7 @@
 								</div>
 								<div class="day">
 									<c:if test="${item.pay == 'paypal' }">
-										<span class="text-danger">${item.pay }</span>
+										<span style="color: #009cde">${item.pay}</span>
 									</c:if>
 									<c:if test="${item.pay == 'check payments' }">
 										<span class="text-success">${item.pay }</span>
