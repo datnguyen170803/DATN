@@ -65,7 +65,6 @@ public class PaypalServiceImpl implements PayPalService {
 
 	@Override
 	public Payment executePayment(String paymentId, String payerId) throws PayPalRESTException {
-
 		Payment payment = new Payment();
 		payment.setId(paymentId);
 		PaymentExecution paymentExecute = new PaymentExecution();
